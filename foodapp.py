@@ -1,12 +1,19 @@
 import streamlit as st
 import sqlite3
 
-# Database setup
+# Connect database
 conn = sqlite3.connect('orders.db', check_same_thread=False)
 c = conn.cursor()
 
-c.execute('''CREATE TABLE IF NOT EXISTS orders
-             (name TEXT, item TEXT, category TEXT, price INT)''')
+# Create table (correct structure)
+c.execute('''
+CREATE TABLE IF NOT EXISTS orders (
+    name TEXT,
+    item TEXT,
+    category TEXT,
+    price INTEGER
+)
+''')
 
 # Menu data
 menu = [
@@ -31,33 +38,41 @@ st.subheader("📋 Menu")
 for item in menu:
     if category_filter == "All" or item["category"] == category_filter:
         if st.button(f"Add {item['name']} - ₹{item['price']}"):
-            c.execute("INSERT INTO orders VALUES (?, ?, ?, ?)", 
-                      (user_name, item["name"], item["category"], item["price"]))
-            conn.commit()
-            st.success(f"{item['name']} added to cart!")
+            if user_name.strip() == "":
+                st.warning("Please enter your name first")
+            else:
+                c.execute(
+                    "INSERT INTO orders (name, item, category, price) VALUES (?, ?, ?, ?)",
+                    (user_name, item["name"], item["category"], item["price"])
+                )
+                conn.commit()
+                st.success(f"{item['name']} added to cart!")
 
 # Show cart
 st.subheader("🛒 Cart")
 
-c.execute("SELECT * FROM orders WHERE name=?", (user_name,))
-orders = c.fetchall()
+if user_name.strip() != "":
+    c.execute("SELECT item, category, price FROM orders WHERE name=?", (user_name,))
+    orders = c.fetchall()
 
-total = 0
+    total = 0
 
-if orders:
-    for order in orders:
-        st.write(f"{order[1]} ({order[2]}) - ₹{order[3]}")
-        total += order[3]
+    if orders:
+        for order in orders:
+            st.write(f"{order[0]} ({order[1]}) - ₹{order[2]}")
+            total += order[2]
 
-    st.write("### 💰 Total Amount:", total)
+        st.write("### 💰 Total Amount:", total)
 
-    # Place order
-    if st.button("Place Order"):
-        st.success(f"Order placed successfully! Thank you {user_name}")
-        c.execute("DELETE FROM orders WHERE name=?", (user_name,))
-        conn.commit()
+        # Place order
+        if st.button("Place Order"):
+            st.success(f"Order placed successfully! Thank you {user_name}")
+            c.execute("DELETE FROM orders WHERE name=?", (user_name,))
+            conn.commit()
+    else:
+        st.info("Cart is empty")
 else:
-    st.info("Cart is empty")
+    st.info("Enter your name to view cart")
 
 # Footer
 st.markdown("---")
