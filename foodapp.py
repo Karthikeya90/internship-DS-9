@@ -1,14 +1,13 @@
 import streamlit as st
 import sqlite3
 
+# Connect database
 conn = sqlite3.connect('orders.db', check_same_thread=False)
 c = conn.cursor()
 
-# FORCE RESET TABLE (fix error permanently)
-c.execute("DROP TABLE IF EXISTS orders")
-
+# Create table safely (NO ERROR)
 c.execute('''
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
     name TEXT,
     item TEXT,
     category TEXT,
@@ -16,7 +15,7 @@ CREATE TABLE orders (
 )
 ''')
 
-# Menu
+# Menu data
 menu = [
     {"name": "Pizza", "category": "Veg", "price": 200},
     {"name": "Burger", "category": "Veg", "price": 120},
@@ -27,27 +26,30 @@ menu = [
 
 st.title("🍔 Online Food Ordering System")
 
+# User input
 user_name = st.text_input("Enter your name")
 
-category = st.selectbox("Category", ["All", "Veg", "Non-Veg"])
+# Category filter
+category_filter = st.selectbox("Select Category", ["All", "Veg", "Non-Veg"])
 
-st.subheader("Menu")
+st.subheader("📋 Menu")
 
+# Display menu
 for item in menu:
-    if category == "All" or item["category"] == category:
+    if category_filter == "All" or item["category"] == category_filter:
         if st.button(f"Add {item['name']} - ₹{item['price']}"):
             if user_name.strip() == "":
-                st.warning("Enter your name first")
+                st.warning("Please enter your name first")
             else:
                 c.execute(
-                    "INSERT INTO orders VALUES (?, ?, ?, ?)",
+                    "INSERT INTO orders (name, item, category, price) VALUES (?, ?, ?, ?)",
                     (user_name, item["name"], item["category"], item["price"])
                 )
                 conn.commit()
-                st.success(f"{item['name']} added!")
+                st.success(f"{item['name']} added to cart!")
 
-# Cart
-st.subheader("Cart")
+# Show cart
+st.subheader("🛒 Cart")
 
 if user_name.strip() != "":
     c.execute("SELECT item, category, price FROM orders WHERE name=?", (user_name,))
@@ -56,17 +58,22 @@ if user_name.strip() != "":
     total = 0
 
     if orders:
-        for o in orders:
-            st.write(f"{o[0]} ({o[1]}) - ₹{o[2]}")
-            total += o[2]
+        for order in orders:
+            st.write(f"{order[0]} ({order[1]}) - ₹{order[2]}")
+            total += order[2]
 
-        st.write("### Total:", total)
+        st.write(f"### 💰 Total Amount: ₹{total}")
 
+        # Place order
         if st.button("Place Order"):
-            st.success("Order placed!")
+            st.success(f"Order placed successfully! Thank you {user_name}")
             c.execute("DELETE FROM orders WHERE name=?", (user_name,))
             conn.commit()
     else:
-        st.info("Cart empty")
+        st.info("Cart is empty")
 else:
-    st.info("Enter name to see cart")
+    st.info("Enter your name to view cart")
+
+# Footer
+st.markdown("---")
+st.write("Developed as a Full Stack Demo Project")
