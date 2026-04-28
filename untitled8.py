@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-import matplotlib.pyplot as plt
 from datetime import datetime
 
 # ---------------- DATABASE ---------------- #
@@ -165,19 +164,9 @@ elif page == "Analytics":
     if not grades.empty:
         st.metric("Class Average", f"{grades['score'].mean():.1f}%")
 
-        # BAR CHART
         st.subheader("📊 Grade Distribution (Bar Chart)")
         bar_data = grades["letter_grade"].value_counts()
         st.bar_chart(bar_data)
-
-        # PIE CHART
-        st.subheader("🥧 Grade Distribution (Pie Chart)")
-
-        fig, ax = plt.subplots()
-        ax.pie(bar_data, labels=bar_data.index, autopct='%1.1f%%')
-        ax.set_title("Grade Distribution")
-
-        st.pyplot(fig)
 
 # ---------------- FOOTER ---------------- #
 st.markdown("---")
