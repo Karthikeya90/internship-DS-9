@@ -3,102 +3,92 @@ import pandas as pd
 import sqlite3
 from datetime import datetime
 
-# ---------------- DATABASE SETUP ---------------- #
-
+# ---------------- DATABASE ---------------- #
 conn = sqlite3.connect("school.db", check_same_thread=False)
 c = conn.cursor()
 
-# Create tables
 c.execute("""CREATE TABLE IF NOT EXISTS users (
-                username TEXT PRIMARY KEY,
-                password TEXT
-            )""")
+    username TEXT PRIMARY KEY,
+    password TEXT
+)""")
 
 c.execute("""CREATE TABLE IF NOT EXISTS students (
-                student_id TEXT PRIMARY KEY,
-                first_name TEXT,
-                last_name TEXT,
-                email TEXT,
-                date_added TEXT
-            )""")
+    student_id TEXT PRIMARY KEY,
+    first_name TEXT,
+    last_name TEXT,
+    email TEXT,
+    date_added TEXT
+)""")
 
 c.execute("""CREATE TABLE IF NOT EXISTS grades (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id TEXT,
-                assignment_name TEXT,
-                score REAL,
-                letter_grade TEXT,
-                date TEXT
-            )""")
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id TEXT,
+    assignment_name TEXT,
+    score REAL,
+    letter_grade TEXT,
+    date TEXT
+)""")
 
 conn.commit()
 
-# ---------------- AUTH SYSTEM ---------------- #
-
+# ---------------- AUTH ---------------- #
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-def auth_page():
+def auth():
     st.title("🔐 Student Grade Analyzer")
-
-    choice = st.radio("Select Option", ["Login", "Sign Up"])
+    choice = st.radio("Select", ["Login", "Sign Up"])
 
     if choice == "Login":
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-
+        u = st.text_input("Username")
+        p = st.text_input("Password", type="password")
         if st.button("Login"):
-            c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+            c.execute("SELECT * FROM users WHERE username=? AND password=?", (u, p))
             if c.fetchone():
                 st.session_state.logged_in = True
-                st.session_state.user = username
-                st.success("Login successful ✅")
                 st.rerun()
             else:
-                st.error("Invalid credentials ❌")
+                st.error("Invalid login")
 
     else:
-        new_user = st.text_input("Create Username")
-        new_pass = st.text_input("Create Password", type="password")
-        confirm = st.text_input("Confirm Password", type="password")
+        u = st.text_input("New Username")
+        p = st.text_input("Password", type="password")
+        cp = st.text_input("Confirm Password", type="password")
 
         if st.button("Sign Up"):
-            if new_pass != confirm:
-                st.warning("Passwords do not match")
+            if p != cp:
+                st.warning("Passwords mismatch")
             else:
                 try:
-                    c.execute("INSERT INTO users VALUES (?,?)", (new_user, new_pass))
+                    c.execute("INSERT INTO users VALUES (?,?)", (u, p))
                     conn.commit()
-                    st.success("Account created! Login now ✅")
+                    st.success("Account created")
                 except:
-                    st.error("Username already exists ❌")
+                    st.error("User exists")
 
 if not st.session_state.logged_in:
-    auth_page()
+    auth()
     st.stop()
 
-# ---------------- MAIN APP ---------------- #
-
-st.set_page_config(page_title="Student Grade Analyzer", layout="wide")
+# ---------------- APP ---------------- #
+st.set_page_config(layout="wide")
 st.title("📚 Student Grade Analyzer")
 
-# Sidebar
 with st.sidebar:
     page = st.radio("Navigation", ["Add Student", "Record Grade", "Dashboard", "Analytics"])
-    
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
 
-# Helper functions
-def calculate_grade(score):
+# Helper
+def grade(score):
     if score >= 90: return "A"
     elif score >= 80: return "B"
     elif score >= 70: return "C"
     elif score >= 60: return "D"
     else: return "F"
 
-# Add Student
+# ---------------- ADD STUDENT ---------------- #
 if page == "Add Student":
     st.header("➕ Add Student")
 
@@ -112,14 +102,14 @@ if page == "Add Student":
             c.execute("INSERT INTO students VALUES (?,?,?,?,?)",
                       (sid, fname, lname, email, datetime.now().strftime("%Y-%m-%d")))
             conn.commit()
-            st.success("Student added ✅")
+            st.success("Added ✅")
         except:
-            st.error("Student ID exists ❌")
+            st.error("ID exists ❌")
 
     df = pd.read_sql("SELECT * FROM students", conn)
     st.dataframe(df)
 
-# Record Grade
+# ---------------- RECORD GRADE ---------------- #
 elif page == "Record Grade":
     st.header("📝 Record Grade")
 
@@ -128,38 +118,45 @@ elif page == "Record Grade":
     if students.empty:
         st.warning("Add students first")
     else:
-        sid = st.selectbox("Student", students["student_id"])
+        students["name"] = students["first_name"] + " " + students["last_name"]
+
+        selected_name = st.selectbox("Select Student", students["name"])
+
+        # Get ID from name
+        sid = students[students["name"] == selected_name]["student_id"].values[0]
+
         assignment = st.text_input("Assignment")
         score = st.number_input("Score", 0.0, 100.0)
 
         if st.button("Save"):
             c.execute("INSERT INTO grades (student_id, assignment_name, score, letter_grade, date) VALUES (?,?,?,?,?)",
-                      (sid, assignment, score, calculate_grade(score), datetime.now().strftime("%Y-%m-%d")))
+                      (sid, assignment, score, grade(score), datetime.now().strftime("%Y-%m-%d")))
             conn.commit()
             st.success("Saved ✅")
 
-        df = pd.read_sql("SELECT * FROM grades", conn)
-        st.dataframe(df)
+        st.dataframe(pd.read_sql("SELECT * FROM grades", conn))
 
-# Dashboard
+# ---------------- DASHBOARD ---------------- #
 elif page == "Dashboard":
     st.header("👤 Student Dashboard")
 
     students = pd.read_sql("SELECT * FROM students", conn)
 
     if not students.empty:
-        sid = st.selectbox("Select Student", students["student_id"])
+        students["name"] = students["first_name"] + " " + students["last_name"]
+
+        selected_name = st.selectbox("Select Student", students["name"])
+        sid = students[students["name"] == selected_name]["student_id"].values[0]
 
         grades = pd.read_sql(f"SELECT * FROM grades WHERE student_id='{sid}'", conn)
 
         if not grades.empty:
-            avg = grades["score"].mean()
-            st.metric("Average", f"{avg:.1f}%")
+            st.metric("Average", f"{grades['score'].mean():.1f}%")
             st.line_chart(grades.set_index("date")["score"])
         else:
-            st.info("No grades yet")
+            st.info("No grades")
 
-# Analytics
+# ---------------- ANALYTICS ---------------- #
 elif page == "Analytics":
     st.header("📊 Class Analytics")
 
@@ -167,8 +164,10 @@ elif page == "Analytics":
 
     if not grades.empty:
         st.metric("Class Average", f"{grades['score'].mean():.1f}%")
-        st.bar_chart(grades["letter_grade"].value_counts())
 
-# Footer
-st.markdown("---")
-st.markdown("*Database Enabled Streamlit App*")
+        st.subheader("Grade Distribution (Bar Chart)")
+        bar_data = grades["letter_grade"].value_counts()
+        st.bar_chart(bar_data)
+
+        st.subheader("Grade Distribution (Pie Chart)")
+        st.pyplot(bar_data.plot.pie(autopct='%1.1f%%').figure)
