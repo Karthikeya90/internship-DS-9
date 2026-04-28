@@ -1,222 +1,174 @@
 import streamlit as st
 import pandas as pd
+import sqlite3
 from datetime import datetime
 
-# Page configuration
-st.set_page_config(page_title="Student Grade Analyzer", page_icon="📚", layout="wide")
+# ---------------- DATABASE SETUP ---------------- #
 
-# ---------------- LOGIN SYSTEM ---------------- #
+conn = sqlite3.connect("school.db", check_same_thread=False)
+c = conn.cursor()
+
+# Create tables
+c.execute("""CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password TEXT
+            )""")
+
+c.execute("""CREATE TABLE IF NOT EXISTS students (
+                student_id TEXT PRIMARY KEY,
+                first_name TEXT,
+                last_name TEXT,
+                email TEXT,
+                date_added TEXT
+            )""")
+
+c.execute("""CREATE TABLE IF NOT EXISTS grades (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT,
+                assignment_name TEXT,
+                score REAL,
+                letter_grade TEXT,
+                date TEXT
+            )""")
+
+conn.commit()
+
+# ---------------- AUTH SYSTEM ---------------- #
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-def login():
-    st.title("🔐 Login - Student Grade Analyzer")
+def auth_page():
+    st.title("🔐 Student Grade Analyzer")
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+    choice = st.radio("Select Option", ["Login", "Sign Up"])
 
-    if st.button("Login"):
-        if username == "admin" and password == "1234":
-            st.session_state.logged_in = True
-            st.success("Login successful ✅")
-            st.rerun()
-        else:
-            st.error("Invalid username or password ❌")
+    if choice == "Login":
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+
+        if st.button("Login"):
+            c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+            if c.fetchone():
+                st.session_state.logged_in = True
+                st.session_state.user = username
+                st.success("Login successful ✅")
+                st.rerun()
+            else:
+                st.error("Invalid credentials ❌")
+
+    else:
+        new_user = st.text_input("Create Username")
+        new_pass = st.text_input("Create Password", type="password")
+        confirm = st.text_input("Confirm Password", type="password")
+
+        if st.button("Sign Up"):
+            if new_pass != confirm:
+                st.warning("Passwords do not match")
+            else:
+                try:
+                    c.execute("INSERT INTO users VALUES (?,?)", (new_user, new_pass))
+                    conn.commit()
+                    st.success("Account created! Login now ✅")
+                except:
+                    st.error("Username already exists ❌")
 
 if not st.session_state.logged_in:
-    login()
+    auth_page()
     st.stop()
 
-# ---------------- APP STARTS AFTER LOGIN ---------------- #
+# ---------------- MAIN APP ---------------- #
 
-# Initialize session state
-if 'students' not in st.session_state:
-    st.session_state.students = {}
-
-if 'grades' not in st.session_state:
-    st.session_state.grades = []
-
-# Helper functions
-def calculate_grade_letter(score):
-    if score >= 90:
-        return 'A'
-    elif score >= 80:
-        return 'B'
-    elif score >= 70:
-        return 'C'
-    elif score >= 60:
-        return 'D'
-    else:
-        return 'F'
-
-def get_student_stats(student_id):
-    student_grades = [g for g in st.session_state.grades if g['student_id'] == student_id]
-    if not student_grades:
-        return None
-    
-    scores = [g['score'] for g in student_grades]
-    return {
-        'average': sum(scores) / len(scores),
-        'highest': max(scores),
-        'lowest': min(scores),
-        'total_assignments': len(scores)
-    }
-
-def get_class_stats():
-    if not st.session_state.grades:
-        return None
-    
-    scores = [g['score'] for g in st.session_state.grades]
-    return {
-        'class_average': sum(scores) / len(scores),
-        'highest_score': max(scores),
-        'lowest_score': min(scores),
-        'total_grades': len(scores)
-    }
-
-# App title
+st.set_page_config(page_title="Student Grade Analyzer", layout="wide")
 st.title("📚 Student Grade Analyzer")
-st.markdown("---")
 
 # Sidebar
 with st.sidebar:
-    st.header("Navigation")
-    page = st.radio("Select Page", ["Add Student", "Record Grade", "Student Dashboard", "Class Analytics"])
+    page = st.radio("Navigation", ["Add Student", "Record Grade", "Dashboard", "Analytics"])
     
-    st.markdown("---")
-    st.subheader("Quick Stats")
-    if st.session_state.students:
-        st.metric("Total Students", len(st.session_state.students))
-    if st.session_state.grades:
-        st.metric("Total Grades", len(st.session_state.grades))
-        class_stats = get_class_stats()
-        if class_stats:
-            st.metric("Class Average", f"{class_stats['class_average']:.1f}%")
-
-    st.markdown("---")
     if st.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
 
-# Add Student Page
-if page == "Add Student":
-    st.header("➕ Add New Student")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        student_id = st.text_input("Student ID", placeholder="e.g., S001")
-        first_name = st.text_input("First Name")
-    
-    with col2:
-        last_name = st.text_input("Last Name")
-        email = st.text_input("Email", placeholder="student@example.com")
-    
-    if st.button("Add Student", type="primary"):
-        if student_id and first_name and last_name:
-            if student_id not in st.session_state.students:
-                st.session_state.students[student_id] = {
-                    'first_name': first_name,
-                    'last_name': last_name,
-                    'email': email,
-                    'date_added': datetime.now().strftime("%Y-%m-%d")
-                }
-                st.success(f"✅ Student {first_name} {last_name} added successfully!")
-                st.rerun()
-            else:
-                st.error("❌ Student ID already exists!")
-        else:
-            st.warning("⚠️ Please fill in all required fields!")
-    
-    if st.session_state.students:
-        st.markdown("---")
-        st.subheader("Registered Students")
-        students_df = pd.DataFrame.from_dict(st.session_state.students, orient='index')
-        students_df.index.name = 'Student ID'
-        st.dataframe(students_df, use_container_width=True)
+# Helper functions
+def calculate_grade(score):
+    if score >= 90: return "A"
+    elif score >= 80: return "B"
+    elif score >= 70: return "C"
+    elif score >= 60: return "D"
+    else: return "F"
 
-# Record Grade Page
+# Add Student
+if page == "Add Student":
+    st.header("➕ Add Student")
+
+    sid = st.text_input("Student ID")
+    fname = st.text_input("First Name")
+    lname = st.text_input("Last Name")
+    email = st.text_input("Email")
+
+    if st.button("Add"):
+        try:
+            c.execute("INSERT INTO students VALUES (?,?,?,?,?)",
+                      (sid, fname, lname, email, datetime.now().strftime("%Y-%m-%d")))
+            conn.commit()
+            st.success("Student added ✅")
+        except:
+            st.error("Student ID exists ❌")
+
+    df = pd.read_sql("SELECT * FROM students", conn)
+    st.dataframe(df)
+
+# Record Grade
 elif page == "Record Grade":
     st.header("📝 Record Grade")
-    
-    if not st.session_state.students:
-        st.warning("⚠️ Please add students first before recording grades!")
-    else:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            student_id = st.selectbox(
-                "Select Student",
-                options=list(st.session_state.students.keys()),
-                format_func=lambda x: f"{x} - {st.session_state.students[x]['first_name']} {st.session_state.students[x]['last_name']}"
-            )
-            assignment_name = st.text_input("Assignment Name", placeholder="e.g., Midterm Exam")
-        
-        with col2:
-            score = st.number_input("Score (%)", min_value=0.0, max_value=100.0, step=0.5)
-            assignment_type = st.selectbox("Assignment Type", ["Exam", "Quiz", "Homework", "Project", "Other"])
-        
-        date = st.date_input("Date")
-        notes = st.text_area("Notes (Optional)")
-        
-        if st.button("Record Grade", type="primary"):
-            if assignment_name:
-                grade_entry = {
-                    'student_id': student_id,
-                    'assignment_name': assignment_name,
-                    'score': score,
-                    'letter_grade': calculate_grade_letter(score),
-                    'assignment_type': assignment_type,
-                    'date': date.strftime("%Y-%m-%d"),
-                    'notes': notes
-                }
-                st.session_state.grades.append(grade_entry)
-                st.success(f"✅ Grade recorded: {score}% ({calculate_grade_letter(score)})")
-                st.rerun()
-            else:
-                st.warning("⚠️ Please enter assignment name!")
-        
-        if st.session_state.grades:
-            st.markdown("---")
-            st.subheader("Recent Grades")
-            recent_grades = st.session_state.grades[-10:][::-1]
-            grades_df = pd.DataFrame(recent_grades)
-            st.dataframe(grades_df, use_container_width=True)
 
-# Student Dashboard
-elif page == "Student Dashboard":
+    students = pd.read_sql("SELECT * FROM students", conn)
+
+    if students.empty:
+        st.warning("Add students first")
+    else:
+        sid = st.selectbox("Student", students["student_id"])
+        assignment = st.text_input("Assignment")
+        score = st.number_input("Score", 0.0, 100.0)
+
+        if st.button("Save"):
+            c.execute("INSERT INTO grades (student_id, assignment_name, score, letter_grade, date) VALUES (?,?,?,?,?)",
+                      (sid, assignment, score, calculate_grade(score), datetime.now().strftime("%Y-%m-%d")))
+            conn.commit()
+            st.success("Saved ✅")
+
+        df = pd.read_sql("SELECT * FROM grades", conn)
+        st.dataframe(df)
+
+# Dashboard
+elif page == "Dashboard":
     st.header("👤 Student Dashboard")
-    
-    if not st.session_state.students:
-        st.warning("⚠️ No students registered yet!")
-    else:
-        student_id = st.selectbox(
-            "Select Student",
-            options=list(st.session_state.students.keys()),
-            format_func=lambda x: f"{x} - {st.session_state.students[x]['first_name']} {st.session_state.students[x]['last_name']}"
-        )
-        
-        student = st.session_state.students[student_id]
-        st.subheader(f"{student['first_name']} {student['last_name']}")
-        
-        stats = get_student_stats(student_id)
-        
-        if stats:
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Average", f"{stats['average']:.1f}%")
-            col2.metric("Highest", f"{stats['highest']:.1f}%")
-            col3.metric("Lowest", f"{stats['lowest']:.1f}%")
-            col4.metric("Assignments", stats['total_assignments'])
 
-            student_grades = [g for g in st.session_state.grades if g['student_id'] == student_id]
-            df = pd.DataFrame(student_grades)
-            st.line_chart(df.set_index('date')['score'])
+    students = pd.read_sql("SELECT * FROM students", conn)
 
-# Class Analytics
-elif page == "Class Analytics":
+    if not students.empty:
+        sid = st.selectbox("Select Student", students["student_id"])
+
+        grades = pd.read_sql(f"SELECT * FROM grades WHERE student_id='{sid}'", conn)
+
+        if not grades.empty:
+            avg = grades["score"].mean()
+            st.metric("Average", f"{avg:.1f}%")
+            st.line_chart(grades.set_index("date")["score"])
+        else:
+            st.info("No grades yet")
+
+# Analytics
+elif page == "Analytics":
     st.header("📊 Class Analytics")
-    
-    if st.session_state.grades:
-        class_stats = get_class_stats()
-        st.metric("Class Average", f"{class_stats['class_average']:.1f}%")
+
+    grades = pd.read_sql("SELECT * FROM grades", conn)
+
+    if not grades.empty:
+        st.metric("Class Average", f"{grades['score'].mean():.1f}%")
+        st.bar_chart(grades["letter_grade"].value_counts())
+
+# Footer
+st.markdown("---")
+st.markdown("*Database Enabled Streamlit App*")
