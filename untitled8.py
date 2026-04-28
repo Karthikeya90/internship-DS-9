@@ -5,6 +5,31 @@ from datetime import datetime
 # Page configuration
 st.set_page_config(page_title="Student Grade Analyzer", page_icon="📚", layout="wide")
 
+# ---------------- LOGIN SYSTEM ---------------- #
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+def login():
+    st.title("🔐 Login - Student Grade Analyzer")
+
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        if username == "admin" and password == "1234":
+            st.session_state.logged_in = True
+            st.success("Login successful ✅")
+            st.rerun()
+        else:
+            st.error("Invalid username or password ❌")
+
+if not st.session_state.logged_in:
+    login()
+    st.stop()
+
+# ---------------- APP STARTS AFTER LOGIN ---------------- #
+
 # Initialize session state
 if 'students' not in st.session_state:
     st.session_state.students = {}
@@ -69,6 +94,11 @@ with st.sidebar:
         if class_stats:
             st.metric("Class Average", f"{class_stats['class_average']:.1f}%")
 
+    st.markdown("---")
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
 # Add Student Page
 if page == "Add Student":
     st.header("➕ Add New Student")
@@ -99,7 +129,6 @@ if page == "Add Student":
         else:
             st.warning("⚠️ Please fill in all required fields!")
     
-    # Display existing students
     if st.session_state.students:
         st.markdown("---")
         st.subheader("Registered Students")
@@ -143,12 +172,11 @@ elif page == "Record Grade":
                     'notes': notes
                 }
                 st.session_state.grades.append(grade_entry)
-                st.success(f"✅ Grade recorded: {score}% ({calculate_grade_letter(score)}) for {assignment_name}")
+                st.success(f"✅ Grade recorded: {score}% ({calculate_grade_letter(score)})")
                 st.rerun()
             else:
-                st.warning("⚠️ Please enter an assignment name!")
+                st.warning("⚠️ Please enter assignment name!")
         
-        # Display recent grades
         if st.session_state.grades:
             st.markdown("---")
             st.subheader("Recent Grades")
@@ -156,7 +184,7 @@ elif page == "Record Grade":
             grades_df = pd.DataFrame(recent_grades)
             st.dataframe(grades_df, use_container_width=True)
 
-# Student Dashboard Page
+# Student Dashboard
 elif page == "Student Dashboard":
     st.header("👤 Student Dashboard")
     
@@ -172,119 +200,23 @@ elif page == "Student Dashboard":
         student = st.session_state.students[student_id]
         st.subheader(f"{student['first_name']} {student['last_name']}")
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.write(f"**Student ID:** {student_id}")
-        with col2:
-            st.write(f"**Email:** {student['email']}")
-        with col3:
-            st.write(f"**Registered:** {student['date_added']}")
-        
-        st.markdown("---")
-        
-        # Student statistics
         stats = get_student_stats(student_id)
         
         if stats:
             col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Average", f"{stats['average']:.1f}%", delta=f"{calculate_grade_letter(stats['average'])}")
-            with col2:
-                st.metric("Highest Score", f"{stats['highest']:.1f}%")
-            with col3:
-                st.metric("Lowest Score", f"{stats['lowest']:.1f}%")
-            with col4:
-                st.metric("Total Assignments", stats['total_assignments'])
-            
-            # Student grades table
-            st.markdown("---")
-            st.subheader("All Grades")
-            student_grades = [g for g in st.session_state.grades if g['student_id'] == student_id]
-            student_grades_df = pd.DataFrame(student_grades)
-            st.dataframe(student_grades_df, use_container_width=True)
-            
-            # Grade trend chart
-            st.markdown("---")
-            st.subheader("Grade Trend")
-            chart_df = student_grades_df[['date', 'score']].copy()
-            chart_df['date'] = pd.to_datetime(chart_df['date'])
-            chart_df = chart_df.sort_values('date')
-            st.line_chart(chart_df.set_index('date')['score'])
-            
-            # Grade distribution by assignment type
-            st.markdown("---")
-            st.subheader("Performance by Assignment Type")
-            type_avg = student_grades_df.groupby('assignment_type')['score'].mean()
-            st.bar_chart(type_avg)
-        else:
-            st.info("📊 No grades recorded for this student yet.")
+            col1.metric("Average", f"{stats['average']:.1f}%")
+            col2.metric("Highest", f"{stats['highest']:.1f}%")
+            col3.metric("Lowest", f"{stats['lowest']:.1f}%")
+            col4.metric("Assignments", stats['total_assignments'])
 
-# Class Analytics Page
+            student_grades = [g for g in st.session_state.grades if g['student_id'] == student_id]
+            df = pd.DataFrame(student_grades)
+            st.line_chart(df.set_index('date')['score'])
+
+# Class Analytics
 elif page == "Class Analytics":
     st.header("📊 Class Analytics")
     
-    if not st.session_state.grades:
-        st.warning("⚠️ No grades recorded yet!")
-    else:
-        # Class statistics
+    if st.session_state.grades:
         class_stats = get_class_stats()
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Class Average", f"{class_stats['class_average']:.1f}%")
-        with col2:
-            st.metric("Highest Score", f"{class_stats['highest_score']:.1f}%")
-        with col3:
-            st.metric("Lowest Score", f"{class_stats['lowest_score']:.1f}%")
-        with col4:
-            st.metric("Total Grades", class_stats['total_grades'])
-        
-        st.markdown("---")
-        
-        # Student averages
-        st.subheader("Student Performance Overview")
-        student_averages = []
-        for sid in st.session_state.students:
-            stats = get_student_stats(sid)
-            if stats:
-                student = st.session_state.students[sid]
-                student_averages.append({
-                    'Student ID': sid,
-                    'Name': f"{student['first_name']} {student['last_name']}",
-                    'Average': round(stats['average'], 1),
-                    'Letter Grade': calculate_grade_letter(stats['average']),
-                    'Assignments': stats['total_assignments']
-                })
-        
-        if student_averages:
-            avg_df = pd.DataFrame(student_averages)
-            avg_df = avg_df.sort_values('Average', ascending=False)
-            st.dataframe(avg_df, use_container_width=True)
-            
-            # Grade distribution chart
-            st.markdown("---")
-            st.subheader("Grade Distribution")
-            grades_df = pd.DataFrame(st.session_state.grades)
-            st.write("Distribution of all scores:")
-            score_hist = pd.cut(grades_df['score'], bins=[0, 60, 70, 80, 90, 100], 
-                               labels=['F (0-59)', 'D (60-69)', 'C (70-79)', 'B (80-89)', 'A (90-100)'])
-            score_counts = score_hist.value_counts().sort_index()
-            st.bar_chart(score_counts)
-            
-            # Letter grade distribution
-            st.markdown("---")
-            st.subheader("Letter Grade Distribution")
-            letter_counts = grades_df['letter_grade'].value_counts()
-            st.bar_chart(letter_counts)
-            
-            # Assignment type performance
-            st.markdown("---")
-            st.subheader("Average Score by Assignment Type")
-            type_avg = grades_df.groupby('assignment_type')['score'].mean()
-            st.bar_chart(type_avg)
-        else:
-            st.info("📊 No student performance data available yet.")
-
-# Footer
-st.markdown("---")
-st.markdown("*Student Grade Analyzer - Built with Streamlit*")
+        st.metric("Class Average", f"{class_stats['class_average']:.1f}%")
