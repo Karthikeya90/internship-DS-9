@@ -165,19 +165,20 @@ elif page == "Analytics":
     if not grades.empty:
         st.metric("Class Average", f"{grades['score'].mean():.1f}%")
 
+        # BAR CHART
         st.subheader("📊 Grade Distribution (Bar Chart)")
         bar_data = grades["letter_grade"].value_counts()
         st.bar_chart(bar_data)
 
+        # PIE CHART
         st.subheader("🥧 Grade Distribution (Pie Chart)")
 
         fig, ax = plt.subplots()
         ax.pie(bar_data, labels=bar_data.index, autopct='%1.1f%%')
         ax.set_title("Grade Distribution")
-        plt.tight_layout()
 
         st.pyplot(fig)
 
 # ---------------- FOOTER ---------------- #
 st.markdown("---")
-st.markdown("*Student Grade Analyzer - Database Version*")
+st.markdown("*Student Grade Analyzer - Final Version*")
